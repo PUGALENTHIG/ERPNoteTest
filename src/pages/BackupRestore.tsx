@@ -159,7 +159,22 @@ const BackupRestore: React.FC = () => {
             totalDocuments += documents.length;
           }
         } catch (error) {
-          console.log(`Collection ${collectionInfo.name} not found or empty:`, error);
+            // Store documents in exact JSON format without any modifications
+            allData[collectionName] = documents.map(doc => {
+              // Keep the document exactly as it is, including all fields and data types
+              const docData = { ...doc };
+              
+              // Convert Firestore Timestamps to ISO strings for JSON serialization
+              Object.keys(docData).forEach(key => {
+                if (docData[key] && typeof docData[key].toDate === 'function') {
+                  docData[key] = docData[key].toDate().toISOString();
+                } else if (docData[key] instanceof Date) {
+                  docData[key] = docData[key].toISOString();
+                }
+              });
+              
+              return docData;
+            });
         }
       }
 
@@ -171,7 +186,7 @@ const BackupRestore: React.FC = () => {
           totalDocuments,
           appName: 'Employee Management System'
         },
-        data: allData
+        data: allData // Store the exact JSON structure
       };
 
       setBackupData(backup);
@@ -190,15 +205,8 @@ const BackupRestore: React.FC = () => {
   const downloadBackup = () => {
     if (!backupData) return;
     
-    // backupData.data already contains the properly formatted backup
-    const dataStr = JSON.stringify(backupData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `employee-management-backup-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
+    // Download the data in the exact same JSON format as stored
+    const backupContent = backupData.data;
     link.click();
     document.body.removeChild(link);
     
@@ -239,29 +247,13 @@ const BackupRestore: React.FC = () => {
       const fileContent = await restoreFile.text();
       const backupContent: BackupData = JSON.parse(fileContent);
       
-      // Validate backup file structure
-      if (!backupContent.metadata || !backupContent.data) {
-        throw new Error('Invalid backup file format');
+      // Use the backup content directly as it's in the same JSON format
+      const collectionsData = backupContent;
+      
+      // Validate that it contains collection-like data
+      if (typeof collectionsData !== 'object' || collectionsData === null) {
+        throw new Error('Invalid backup file format - file must contain valid JSON object');
       }
-
-      // Step 2: Initialize Firebase (20%)
-      setRestoreProgress(20);
-      setCurrentOperation('Connecting to Firebase...');
-      setStatus('Initializing Firebase connection...');
-      
-      // Use dynamic Firebase import for better compatibility
-      const { initializeApp } = await import('firebase/app');
-      const { getFirestore, collection, doc, setDoc, writeBatch, deleteDoc, getDocs } = await import('firebase/firestore');
-      
-      const app = initializeApp(firebaseConfig);
-      const db = getFirestore(app);
-
-      const collectionsToRestore = Object.keys(backupContent.data);
-      let restoredCount = 0;
-      const totalCollections = collectionsToRestore.length;
-
-      // Step 3: Start restoration (30% - 90%)
-      setRestoreProgress(30);
       setStatus('Restoring data...');
 
       // Restore each collection
@@ -344,21 +336,14 @@ const BackupRestore: React.FC = () => {
         for (const document of documents) {
           const { id, ...data } = document;
           
-          // Convert ISO strings back to Date objects
-          const processedData = {
-            ...data,
-            createdAt: data.createdAt ? new Date(data.createdAt) : null,
-            date: data.date ? new Date(data.date) : null,
-            dob: data.dob ? new Date(data.dob) : null,
-            dateOfJoining: data.dateOfJoining ? new Date(data.dateOfJoining) : null,
-            weekStartDate: data.weekStartDate ? new Date(data.weekStartDate) : null,
-            weekEndDate: data.weekEndDate ? new Date(data.weekEndDate) : null
-          };
+          // Process the data to convert ISO strings back to Date objects where needed
+          const processedData = { ...data };
           
-          // Remove null values
+          // Convert ISO date strings back to Date objects for Firestore
           Object.keys(processedData).forEach(key => {
-            if (processedData[key] === null) {
-              delete processedData[key];
+            const value = processedData[key];
+            if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+              processedData[key] = new Date(value);
             }
           });
           
