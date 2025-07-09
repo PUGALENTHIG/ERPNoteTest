@@ -289,7 +289,7 @@ const BackupRestore: React.FC = () => {
             if (batchDeleteCount > 0) {
               await deleteBatch.commit();
               // Add delay between batches to prevent quota exhaustion
-              await new Promise(resolve => setTimeout(resolve, 200));
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
             
             // If we processed fewer than 500 docs, we're done
@@ -340,7 +340,7 @@ const BackupRestore: React.FC = () => {
           if (batchCount >= 400) {
             await batch.commit();
             // Add delay between batches to prevent quota exhaustion
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 500));
             batch = writeBatch(db);
             batchCount = 0;
           }
@@ -350,7 +350,7 @@ const BackupRestore: React.FC = () => {
         if (batchCount > 0) {
           await batch.commit();
           // Add delay after final batch
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
         
         restoredCount += documents.length;
