@@ -56,6 +56,8 @@ const BackupRestore: React.FC = () => {
   const [status, setStatus] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [isConfirmationValid, setIsConfirmationValid] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState(0);
+  const [currentOperation, setCurrentOperation] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // All collections to backup
@@ -206,8 +208,13 @@ const BackupRestore: React.FC = () => {
     }
     setIsProcessing(true);
     setStatus('Reading backup file...');
+    setRestoreProgress(0);
+    setCurrentOperation('Initializing restore process...');
 
     try {
+      // Step 1: Read and parse file (10%)
+      setRestoreProgress(10);
+      setCurrentOperation('Reading backup file...');
       const fileContent = await restoreFile.text();
       const backupContent: BackupData = JSON.parse(fileContent);
       
@@ -216,6 +223,9 @@ const BackupRestore: React.FC = () => {
         throw new Error('Invalid backup file format');
       }
 
+      // Step 2: Initialize Firebase (20%)
+      setRestoreProgress(20);
+      setCurrentOperation('Connecting to Firebase...');
       setStatus('Initializing Firebase connection...');
       
       // Use dynamic Firebase import for better compatibility
@@ -227,12 +237,21 @@ const BackupRestore: React.FC = () => {
 
       const collectionsToRestore = Object.keys(backupContent.data);
       let restoredCount = 0;
+      const totalCollections = collectionsToRestore.length;
 
+      // Step 3: Start restoration (30% - 90%)
+      setRestoreProgress(30);
       setStatus('Restoring data...');
 
       // Restore each collection
-      for (const collectionName of collectionsToRestore) {
+      for (let i = 0; i < collectionsToRestore.length; i++) {
+        const collectionName = collectionsToRestore[i];
+        const collectionProgress = 30 + ((i / totalCollections) * 60); // 30% to 90%
+        
+        setRestoreProgress(Math.round(collectionProgress));
+        setCurrentOperation(`Restoring ${collectionName}...`);
         setStatus(`Restoring ${collectionName}...`);
+        
         const documents = backupContent.data[collectionName];
         
         if (!Array.isArray(documents) || documents.length === 0) {
@@ -241,6 +260,9 @@ const BackupRestore: React.FC = () => {
         
         // Clear existing data in the collection first
         try {
+          setCurrentOperation(`Clearing existing ${collectionName} data...`);
+          await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for UI update
+          
           const existingDocs = await getDocs(collection(db, collectionName));
           const deletePromises = existingDocs.docs.map(doc => deleteDoc(doc.ref));
           await Promise.all(deletePromises);
@@ -248,6 +270,9 @@ const BackupRestore: React.FC = () => {
         } catch (error) {
           console.log(`Could not clear ${collectionName}:`, error);
         }
+        
+        setCurrentOperation(`Writing ${documents.length} ${collectionName} records...`);
+        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for UI update
         
         // Use batch writes for better performance
         let batch = writeBatch(db);
@@ -295,6 +320,14 @@ const BackupRestore: React.FC = () => {
         restoredCount += documents.length;
       }
 
+      // Step 4: Finalization (95%)
+      setRestoreProgress(95);
+      setCurrentOperation('Finalizing restore...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Step 5: Complete (100%)
+      setRestoreProgress(100);
+      setCurrentOperation('Restore completed successfully!');
       setStatus(`✅ Successfully restored ${restoredCount} documents across ${collectionsToRestore.length} collections`);
       setRestoreFile(null);
       if (fileInputRef.current) {
@@ -312,6 +345,8 @@ const BackupRestore: React.FC = () => {
     } catch (error) {
       console.error('Restore failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setRestoreProgress(0);
+      setCurrentOperation('Restore failed');
       setStatus(`❌ Restore failed: ${errorMessage}`);
       alert(`Restore failed: ${errorMessage}`);
     } finally {
@@ -546,6 +581,36 @@ const BackupRestore: React.FC = () => {
                 {isProcessing ? (
                   <Loader2 className="w-6 h-6 animate-spin" />
                 ) : (
+                    
+                    {/* Progress Bar for Restore Process */}
+                    {isProcessing && activeTab === 'backup' && restoreProgress > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-blue-900">{currentOperation}</span>
+                          <span className="text-blue-700">{restoreProgress}%</span>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                          <div 
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300 ease-out relative"
+                            style={{ width: `${restoreProgress}%` }}
+                          >
+                            {/* Animated shine effect */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
+                          </div>
+                        </div>
+                        
+                        {/* Progress Steps */}
+                        <div className="flex justify-between text-xs text-blue-600 mt-2">
+                          <span className={restoreProgress >= 10 ? 'font-semibold' : ''}>Reading</span>
+                          <span className={restoreProgress >= 30 ? 'font-semibold' : ''}>Connecting</span>
+                          <span className={restoreProgress >= 50 ? 'font-semibold' : ''}>Restoring</span>
+                          <span className={restoreProgress >= 95 ? 'font-semibold' : ''}>Finalizing</span>
+                          <span className={restoreProgress >= 100 ? 'font-semibold text-green-600' : ''}>Complete</span>
+                        </div>
+                      </div>
+                    )}
                   <RotateCcw className="w-6 h-6" />
                 )}
                 {isProcessing ? 'Restoring...' : 'Restore Database'}
@@ -630,22 +695,59 @@ const BackupRestore: React.FC = () => {
                 </p>
                 
                 <ConfirmationInput />
+                
+                {/* Progress Section in Modal */}
+                {isProcessing && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-blue-900">Restore Progress</span>
+                        <span className="text-sm font-bold text-blue-700">{restoreProgress}%</span>
+                      </div>
+                      
+                      {/* Progress Bar */}
+                      <div className="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${restoreProgress}%` }}
+                        ></div>
+                      </div>
+                      
+                      <p className="text-xs text-blue-700">{currentOperation}</p>
+                      
+                      {restoreProgress === 100 && (
+                        <div className="flex items-center gap-2 text-green-700">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Restore completed! Page will refresh shortly...</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             
             <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
               <button
                 onClick={() => setShowConfirmDialog(false)}
+                disabled={isProcessing}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={restoreFromBackup}
-                disabled={!isConfirmationValid}
+                disabled={!isConfirmationValid || isProcessing}
                 className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                Restore Database
+                {isProcessing ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Restoring... {restoreProgress}%
+                  </div>
+                ) : (
+                  'Restore Database'
+                )}
               </button>
             </div>
           </div>
