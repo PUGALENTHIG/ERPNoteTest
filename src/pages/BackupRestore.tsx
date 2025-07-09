@@ -55,6 +55,7 @@ const BackupRestore: React.FC = () => {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [status, setStatus] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [isConfirmationValid, setIsConfirmationValid] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // All collections to backup
@@ -70,6 +71,28 @@ const BackupRestore: React.FC = () => {
     { name: 'shiftAssignments', icon: UserCheck, description: 'Weekly shift assignments' },
     { name: 'users', icon: Shield, description: 'User accounts and permissions' }
   ];
+
+  // Confirmation Input Component
+  const ConfirmationInput = () => {
+    const [confirmText, setConfirmText] = useState('');
+    
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setConfirmText(value);
+      setIsConfirmationValid(value === 'CONFIRM');
+    };
+    
+    return (
+      <input
+        type="text"
+        value={confirmText}
+        onChange={handleChange}
+        placeholder="Type CONFIRM to proceed"
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+        autoComplete="off"
+      />
+    );
+  };
 
   // Initialize Firebase
   const initializeFirebase = () => {
@@ -175,6 +198,10 @@ const BackupRestore: React.FC = () => {
       return;
     }
 
+    if (!isConfirmationValid) {
+      alert('Please type "CONFIRM" to proceed with the restore');
+      return;
+    }
     setIsProcessing(true);
     setStatus('Reading backup file...');
 
@@ -256,6 +283,7 @@ const BackupRestore: React.FC = () => {
         fileInputRef.current.value = '';
       }
       setShowConfirmDialog(false);
+      setIsConfirmationValid(false);
 
       // Refresh the page after successful restore
       setTimeout(() => {
@@ -580,17 +608,7 @@ const BackupRestore: React.FC = () => {
                   Type "CONFIRM" below to proceed with the restore:
                 </p>
                 
-                <input
-                  type="text"
-                  placeholder="Type CONFIRM to proceed"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  onChange={(e) => {
-                    const confirmBtn = document.getElementById('confirm-restore-btn') as HTMLButtonElement;
-                    if (confirmBtn) {
-                      confirmBtn.disabled = e.target.value !== 'CONFIRM';
-                    }
-                  }}
-                />
+                <ConfirmationInput />
               </div>
             </div>
             
@@ -602,9 +620,8 @@ const BackupRestore: React.FC = () => {
                 Cancel
               </button>
               <button
-                id="confirm-restore-btn"
                 onClick={restoreFromBackup}
-                disabled={true}
+                disabled={!isConfirmationValid}
                 className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
                 Restore Database
