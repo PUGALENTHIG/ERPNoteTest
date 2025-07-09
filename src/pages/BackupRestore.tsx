@@ -263,9 +263,41 @@ const BackupRestore: React.FC = () => {
           setCurrentOperation(`Clearing existing ${collectionName} data...`);
           await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for UI update
           
-          const existingDocs = await getDocs(collection(db, collectionName));
-          const deletePromises = existingDocs.docs.map(doc => deleteDoc(doc.ref));
-          await Promise.all(deletePromises);
+          // Clear existing data in batches to avoid quota limits
+          let hasMoreDocs = true;
+          while (hasMoreDocs) {
+            const existingDocs = await getDocs(collection(db, collectionName));
+            
+            if (existingDocs.empty) {
+              hasMoreDocs = false;
+              break;
+            }
+            
+            // Delete in batches of 500 (Firestore limit)
+            const deleteBatch = writeBatch(db);
+            let batchDeleteCount = 0;
+            
+            for (const doc of existingDocs.docs) {
+              deleteBatch.delete(doc.ref);
+              batchDeleteCount++;
+              
+              if (batchDeleteCount >= 500) {
+                break;
+              }
+            }
+            
+            if (batchDeleteCount > 0) {
+              await deleteBatch.commit();
+              // Add delay between batches to prevent quota exhaustion
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            // If we processed fewer than 500 docs, we're done
+            if (batchDeleteCount < 500) {
+              hasMoreDocs = false;
+            }
+          }
+          
           setStatus(`Cleared existing ${collectionName} data...`);
         } catch (error) {
           console.log(`Could not clear ${collectionName}:`, error);
@@ -304,9 +336,11 @@ const BackupRestore: React.FC = () => {
           batch.set(docRef, processedData);
           batchCount++;
           
-          // Commit batch every 500 documents (Firestore limit)
-          if (batchCount >= 500) {
+          // Commit batch every 400 documents (safer limit to avoid quota issues)
+          if (batchCount >= 400) {
             await batch.commit();
+            // Add delay between batches to prevent quota exhaustion
+            await new Promise(resolve => setTimeout(resolve, 300));
             batch = writeBatch(db);
             batchCount = 0;
           }
@@ -315,6 +349,8 @@ const BackupRestore: React.FC = () => {
         // Commit remaining documents
         if (batchCount > 0) {
           await batch.commit();
+          // Add delay after final batch
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
         
         restoredCount += documents.length;
