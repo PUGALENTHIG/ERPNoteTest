@@ -581,40 +581,40 @@ const BackupRestore: React.FC = () => {
                 {isProcessing ? (
                   <Loader2 className="w-6 h-6 animate-spin" />
                 ) : (
-                    
-                    {/* Progress Bar for Restore Process */}
-                    {isProcessing && activeTab === 'backup' && restoreProgress > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-blue-900">{currentOperation}</span>
-                          <span className="text-blue-700">{restoreProgress}%</span>
-                        </div>
-                        
-                        {/* Progress Bar */}
-                        <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
-                          <div 
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300 ease-out relative"
-                            style={{ width: `${restoreProgress}%` }}
-                          >
-                            {/* Animated shine effect */}
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
-                          </div>
-                        </div>
-                        
-                        {/* Progress Steps */}
-                        <div className="flex justify-between text-xs text-blue-600 mt-2">
-                          <span className={restoreProgress >= 10 ? 'font-semibold' : ''}>Reading</span>
-                          <span className={restoreProgress >= 30 ? 'font-semibold' : ''}>Connecting</span>
-                          <span className={restoreProgress >= 50 ? 'font-semibold' : ''}>Restoring</span>
-                          <span className={restoreProgress >= 95 ? 'font-semibold' : ''}>Finalizing</span>
-                          <span className={restoreProgress >= 100 ? 'font-semibold text-green-600' : ''}>Complete</span>
-                        </div>
-                      </div>
-                    )}
                   <RotateCcw className="w-6 h-6" />
                 )}
                 {isProcessing ? 'Restoring...' : 'Restore Database'}
               </button>
+            )}
+
+            {/* Progress Bar for Restore Process */}
+            {isProcessing && restoreProgress > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-blue-900">{currentOperation}</span>
+                  <span className="text-blue-700">{restoreProgress}%</span>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300 ease-out relative"
+                    style={{ width: `${restoreProgress}%` }}
+                  >
+                    {/* Animated shine effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
+                  </div>
+                </div>
+                
+                {/* Progress Steps */}
+                <div className="flex justify-between text-xs text-blue-600 mt-2">
+                  <span className={restoreProgress >= 10 ? 'font-semibold' : ''}>Reading</span>
+                  <span className={restoreProgress >= 30 ? 'font-semibold' : ''}>Connecting</span>
+                  <span className={restoreProgress >= 50 ? 'font-semibold' : ''}>Restoring</span>
+                  <span className={restoreProgress >= 95 ? 'font-semibold' : ''}>Finalizing</span>
+                  <span className={restoreProgress >= 100 ? 'font-semibold text-green-600' : ''}>Complete</span>
+                </div>
+              </div>
             )}
           </div>
 
