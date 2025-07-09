@@ -151,15 +151,16 @@ export const calculateSalary = (
 ): SalaryReport => {
   const totalWorkingDays = getWorkingDaysInMonth(year, month, holidays);
 
+  // Filter attendance and allowances by actual date (not creation date)
   const monthAttendance = attendance.filter(att => {
-    const attDate = new Date(att.date);
+    const attDate = new Date(att.date); // Use actual attendance date
     return att.employeeId === employee.id && 
            attDate.getFullYear() === year && 
            attDate.getMonth() === month;
   });
 
   const monthAllowances = allowances.filter(all => {
-    const allDate = new Date(all.date);
+    const allDate = new Date(all.date); // Use actual allowance date
     return all.employeeId === employee.id &&
            allDate.getFullYear() === year && 
            allDate.getMonth() === month;
@@ -198,18 +199,42 @@ export const calculateSalary = (
 
   const totalPresentSessions = fnPresentDays + anPresentDays;
 
-  // Calculate basic salary
+  // Calculate per day salary based on employee type
+  let perDaySalary = 0;
+  let hourlyRate = 0;
+  
+  if (employee.employeeType === 'staff') {
+    // Staff: Monthly Salary ÷ Total Working Days
+    perDaySalary = employee.monthlySalary / totalWorkingDays;
+    hourlyRate = perDaySalary / 8;
+  } else {
+    // Labour: Fixed Daily Wage
+    perDaySalary = employee.dailySalary;
+    hourlyRate = perDaySalary / 8;
+  }
+
+  // Calculate basic salary using present days
   let basicSalary = 0;
   let fnSalary = 0;
   let anSalary = 0;
 
-  fnSalary = fnPresentDays * (employee.salaryPerDay / 2);
-  anSalary = anPresentDays * (employee.salaryPerDay / 2);
+  // Total present days (full days + half days)
+  const totalPresentDays = fnPresentDays + anPresentDays;
+  
+  // For session-based calculation
+  fnSalary = fnPresentDays * (perDaySalary / 2);
+  anSalary = anPresentDays * (perDaySalary / 2);
   basicSalary = fnSalary + anSalary;
 
-  // Calculate OT amount (1.5x hourly rate)
-  const hourlyRate = employee.salaryPerDay / 8;
-  const otAmount = totalOtHours * hourlyRate * 1.5;
+  // Different OT calculation for staff vs labour
+  let otAmount = 0;
+  if (employee.employeeType === 'staff') {
+    // Staff: OT Hours × Hourly Rate (Monthly Salary ÷ Working Days ÷ 8)
+    otAmount = totalOtHours * hourlyRate;
+  } else {
+    // Labour: OT Hours × Hourly Rate (no premium, just regular hourly rate)
+    otAmount = totalOtHours * hourlyRate;
+  }
 
   // Calculate allowances
   const totalAllowances = monthAllowances.reduce((sum, all) => sum + all.amount, 0);
