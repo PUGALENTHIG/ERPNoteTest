@@ -123,12 +123,12 @@ const BackupRestore: React.FC = () => {
             // Convert dates to ISO strings for JSON serialization
             const serializedDocuments = documents.map(doc => ({
               ...doc,
-              createdAt: doc.createdAt ? doc.createdAt.toISOString() : null,
-              date: doc.date ? doc.date.toISOString() : null,
-              dob: doc.dob ? doc.dob.toISOString() : null,
-              dateOfJoining: doc.dateOfJoining ? doc.dateOfJoining.toISOString() : null,
-              weekStartDate: doc.weekStartDate ? doc.weekStartDate.toISOString() : null,
-              weekEndDate: doc.weekEndDate ? doc.weekEndDate.toISOString() : null
+              createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+              date: doc.date instanceof Date ? doc.date.toISOString() : doc.date,
+              dob: doc.dob instanceof Date ? doc.dob.toISOString() : doc.dob,
+              dateOfJoining: doc.dateOfJoining instanceof Date ? doc.dateOfJoining.toISOString() : doc.dateOfJoining,
+              weekStartDate: doc.weekStartDate instanceof Date ? doc.weekStartDate.toISOString() : doc.weekStartDate,
+              weekEndDate: doc.weekEndDate instanceof Date ? doc.weekEndDate.toISOString() : doc.weekEndDate
             }));
             
             allData[collectionInfo.name] = serializedDocuments;
@@ -136,7 +136,7 @@ const BackupRestore: React.FC = () => {
             totalDocuments += documents.length;
           }
         } catch (error) {
-          console.log(`Collection ${collectionInfo.name} not found or empty`);
+          console.log(`Collection ${collectionInfo.name} not found or empty:`, error);
         }
       }
 
@@ -156,17 +156,10 @@ const BackupRestore: React.FC = () => {
 
     } catch (error) {
       console.error('Backup failed:', error);
-      setStatus(`❌ Backup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Download backup file
-  const downloadBackup = () => {
-    if (!backupData) return;
-
-    const dataStr = JSON.stringify(backupData, null, 2);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setStatus(`❌ Backup failed: ${errorMessage}`);
+    // backupData.data already contains the properly formatted backup
+    const dataStr = JSON.stringify(backupData.data, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     
@@ -215,7 +208,13 @@ const BackupRestore: React.FC = () => {
       }
 
       setStatus('Initializing Firebase connection...');
-      const { db, collection, doc, setDoc, writeBatch } = initializeFirebase();
+      
+      // Use dynamic Firebase import for better compatibility
+      const { initializeApp } = await import('firebase/app');
+      const { getFirestore, collection, doc, setDoc, writeBatch, deleteDoc, getDocs } = await import('firebase/firestore');
+      
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
 
       const collectionsToRestore = Object.keys(backupContent.data);
       let restoredCount = 0;
@@ -229,6 +228,16 @@ const BackupRestore: React.FC = () => {
         
         if (!Array.isArray(documents) || documents.length === 0) {
           continue;
+        }
+        
+        // Clear existing data in the collection first
+        try {
+          const existingDocs = await getDocs(collection(db, collectionName));
+          const deletePromises = existingDocs.docs.map(doc => deleteDoc(doc.ref));
+          await Promise.all(deletePromises);
+          setStatus(`Cleared existing ${collectionName} data...`);
+        } catch (error) {
+          console.log(`Could not clear ${collectionName}:`, error);
         }
         
         // Use batch writes for better performance
@@ -275,6 +284,7 @@ const BackupRestore: React.FC = () => {
         }
         
         restoredCount += documents.length;
+        setStatus(`Restored ${documents.length} documents to ${collectionName}...`);
       }
 
       setStatus(`✅ Successfully restored ${restoredCount} documents across ${collectionsToRestore.length} collections`);
@@ -287,12 +297,15 @@ const BackupRestore: React.FC = () => {
 
       // Refresh the page after successful restore
       setTimeout(() => {
+        alert('Database restore completed successfully! The page will now refresh.');
         window.location.reload();
       }, 2000);
 
     } catch (error) {
       console.error('Restore failed:', error);
-      setStatus(`❌ Restore failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setStatus(`❌ Restore failed: ${errorMessage}`);
+      alert(`Restore failed: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
@@ -387,6 +400,8 @@ const BackupRestore: React.FC = () => {
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <Download className="w-6 h-6" />
+                  <li>Type "CONFIRM" in the confirmation dialog</li>
+                  <li>Click "Restore Database" to proceed</li>
                 Download Backup File
               </button>
             )}
@@ -399,9 +414,21 @@ const BackupRestore: React.FC = () => {
                 status.includes('failed') || status.includes('❌') ? 'bg-red-50 border-red-200' : 
                 status.includes('Successfully') || status.includes('✅') ? 'bg-green-50 border-green-200' : 
                 'bg-blue-50 border-blue-200'
+                  <li>• Ensure stable internet connection during restore</li>
+                  <li>• Allow sufficient time for large data restores</li>
               }`}>
                 <div className="flex items-center gap-3">
                   {status.includes('failed') || status.includes('❌') ? (
+              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <h4 className="font-medium text-green-900 mb-2">Troubleshooting:</h4>
+                <ul className="text-sm text-green-800 space-y-1">
+                  <li>• If restore fails, check browser console for errors</li>
+                  <li>• Ensure backup file is valid JSON format</li>
+                  <li>• Large files may take several minutes to process</li>
+                  <li>• Page will refresh automatically after successful restore</li>
+                </ul>
+              </div>
+
                     <X className="w-6 h-6 text-red-600" />
                   ) : status.includes('Successfully') || status.includes('✅') ? (
                     <CheckCircle className="w-6 h-6 text-green-600" />
