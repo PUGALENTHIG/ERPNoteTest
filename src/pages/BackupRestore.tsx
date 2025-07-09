@@ -103,6 +103,27 @@ const BackupRestore: React.FC = () => {
     return { db, collection, getDocs, doc, setDoc, writeBatch };
   };
 
+  // Helper function to implement exponential backoff for Firebase operations
+  const executeWithBackoff = async (operation: () => Promise<any>, maxRetries = 3) => {
+    let retries = 0;
+    
+    while (retries < maxRetries) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        if (error?.code === 'resource-exhausted' && retries < maxRetries - 1) {
+          const delay = Math.min(1000 * Math.pow(2, retries), 10000); // Exponential backoff, max 10s
+          console.log(`Firebase quota exceeded, retrying in ${delay}ms...`);
+          setStatus(`⏳ Rate limited, waiting ${delay/1000}s before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retries++;
+        } else {
+          throw error;
+        }
+      }
+    }
+  };
+
   // Create complete backup
   const createBackup = async () => {
     setIsProcessing(true);
@@ -265,8 +286,16 @@ const BackupRestore: React.FC = () => {
           
           // Clear existing data in batches to avoid quota limits
           let hasMoreDocs = true;
+          let clearAttempts = 0;
+          const maxClearAttempts = 10;
+          
           while (hasMoreDocs) {
-            const existingDocs = await getDocs(collection(db, collectionName));
+            if (clearAttempts >= maxClearAttempts) {
+              console.log(`Max clear attempts reached for ${collectionName}, continuing...`);
+              break;
+            }
+            
+            const existingDocs = await executeWithBackoff(() => getDocs(collection(db, collectionName)));
             
             if (existingDocs.empty) {
               hasMoreDocs = false;
@@ -281,21 +310,23 @@ const BackupRestore: React.FC = () => {
               deleteBatch.delete(doc.ref);
               batchDeleteCount++;
               
-              if (batchDeleteCount >= 500) {
+              if (batchDeleteCount >= 200) { // Reduced batch size for safer operations
                 break;
               }
             }
             
             if (batchDeleteCount > 0) {
-              await deleteBatch.commit();
+              await executeWithBackoff(() => deleteBatch.commit());
               // Add delay between batches to prevent quota exhaustion
-              await new Promise(resolve => setTimeout(resolve, 500));
+              await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
-            // If we processed fewer than 500 docs, we're done
-            if (batchDeleteCount < 500) {
+            // If we processed fewer than 200 docs, we're done
+            if (batchDeleteCount < 200) {
               hasMoreDocs = false;
             }
+            
+            clearAttempts++;
           }
           
           setStatus(`Cleared existing ${collectionName} data...`);
@@ -336,11 +367,11 @@ const BackupRestore: React.FC = () => {
           batch.set(docRef, processedData);
           batchCount++;
           
-          // Commit batch every 400 documents (safer limit to avoid quota issues)
-          if (batchCount >= 400) {
-            await batch.commit();
+          // Commit batch every 100 documents (much safer limit)
+          if (batchCount >= 100) {
+            await executeWithBackoff(() => batch.commit());
             // Add delay between batches to prevent quota exhaustion
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1500));
             batch = writeBatch(db);
             batchCount = 0;
           }
@@ -348,9 +379,9 @@ const BackupRestore: React.FC = () => {
         
         // Commit remaining documents
         if (batchCount > 0) {
-          await batch.commit();
+          await executeWithBackoff(() => batch.commit());
           // Add delay after final batch
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
         restoredCount += documents.length;
