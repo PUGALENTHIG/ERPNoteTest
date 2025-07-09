@@ -283,8 +283,6 @@ const BackupRestore: React.FC = () => {
           await batch.commit();
         }
         
-        restoredCount += documents.length;
-        setStatus(`Restored ${documents.length} documents to ${collectionName}...`);
       }
 
       setStatus(`✅ Successfully restored ${restoredCount} documents across ${collectionsToRestore.length} collections`);
