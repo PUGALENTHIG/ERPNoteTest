@@ -158,17 +158,8 @@ const BackupRestore: React.FC = () => {
       console.error('Backup failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setStatus(`❌ Backup failed: ${errorMessage}`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Download backup file
-  const downloadBackup = () => {
-    if (!backupData) return;
-    
     // backupData.data already contains the properly formatted backup
-    const dataStr = JSON.stringify(backupData, null, 2);
+    const dataStr = JSON.stringify(backupData.data, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     
@@ -292,8 +283,6 @@ const BackupRestore: React.FC = () => {
           await batch.commit();
         }
         
-        restoredCount += documents.length;
-        setStatus(`Restored ${documents.length} documents to ${collectionName}...`);
       }
 
       setStatus(`✅ Successfully restored ${restoredCount} documents across ${collectionsToRestore.length} collections`);
@@ -421,9 +410,21 @@ const BackupRestore: React.FC = () => {
                 status.includes('failed') || status.includes('❌') ? 'bg-red-50 border-red-200' : 
                 status.includes('Successfully') || status.includes('✅') ? 'bg-green-50 border-green-200' : 
                 'bg-blue-50 border-blue-200'
+                  <li>• Ensure stable internet connection during restore</li>
+                  <li>• Allow sufficient time for large data restores</li>
               }`}>
                 <div className="flex items-center gap-3">
                   {status.includes('failed') || status.includes('❌') ? (
+              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <h4 className="font-medium text-green-900 mb-2">Troubleshooting:</h4>
+                <ul className="text-sm text-green-800 space-y-1">
+                  <li>• If restore fails, check browser console for errors</li>
+                  <li>• Ensure backup file is valid JSON format</li>
+                  <li>• Large files may take several minutes to process</li>
+                  <li>• Page will refresh automatically after successful restore</li>
+                </ul>
+              </div>
+
                     <X className="w-6 h-6 text-red-600" />
                   ) : status.includes('Successfully') || status.includes('✅') ? (
                     <CheckCircle className="w-6 h-6 text-green-600" />
